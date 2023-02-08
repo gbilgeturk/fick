@@ -7,10 +7,15 @@ import android.os.SystemClock
 import android.util.Log
 import android.widget.Chronometer
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,27 +25,35 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.gokturk.bilgeturk.fick.ui.theme.FickTheme
-import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.random.Random
@@ -54,34 +67,31 @@ class MainActivity : ComponentActivity() {
         setContent {
             FickTheme {
                 val staticList by remember {
-                    mutableStateOf(
-                        mutableListOf(
-                            ItemData(1, false),
-                            ItemData(2, false),
-                            ItemData(3, false),
-                            ItemData(4, false),
-                            ItemData(5, false),
-                            ItemData(6, false),
-                            ItemData(7, false),
-                            ItemData(8, false),
-                            ItemData(9, false),
-                            ItemData(10, false),
-                            ItemData(11, false),
-                            ItemData(12, false),
-                            ItemData(13, false),
-                            ItemData(14, false),
-                            ItemData(15, false),
-                            ItemData(16, false)
-                        ).apply {
-                            this.shuffle()
-                        }
-                    )
+                    mutableStateOf(mutableListOf(
+                        ItemData(1, false),
+                        ItemData(2, false),
+                        ItemData(3, false),
+                        ItemData(4, false),
+                        ItemData(5, false),
+                        ItemData(6, false),
+                        ItemData(7, false),
+                        ItemData(8, false),
+                        ItemData(9, false),
+                        ItemData(10, false),
+                        ItemData(11, false),
+                        ItemData(12, false),
+                        ItemData(13, false),
+                        ItemData(14, false),
+                        ItemData(15, false),
+                        ItemData(16, false)
+                    ).apply {
+                        this.shuffle()
+                    })
                 }
                 val context = LocalContext.current
-                val ch = Chronometer(context)
+                var ch = Chronometer(context)
                 ch.isCountDown = false
-                ch.format =  "hh:mm:ss"
-               ch.start()
+                ch.format = "hh:mm:ss"
 
 
                 //var wanted by remember { mutableStateOf(generateWantedNumber(staticList)) }
@@ -92,17 +102,15 @@ class MainActivity : ComponentActivity() {
                     NavHost(navController = navController, startDestination = "Splash") {
                         composable(route = "Splash") {
                             /* Using composable function */
+                            ch = Chronometer(context)
+                            ch.isCountDown = false
+                            ch.format = "hh:mm:ss"
                             SplashScreen(navController)
                         }
                         composable(route = "Game") {
                             /* Using composable function */
-                            GameScreen(navController, context,staticList,ch)
-                        }
-                        composable(route = "GameOver/{time}") {navBackStackEntry->
-                            val time = navBackStackEntry.arguments?.getString("time")
-
-                            /* Using composable function */
-                            GameOverScreen(navController, time ?: "xx:xx")
+                            ch.start()
+                            GameScreen(navController, staticList, ch)
                         }
                     }
 
@@ -113,23 +121,71 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun SplashScreen(navController: NavController){
-    
-    Button(onClick = {navController.navigate("Game")}) {
-            Text(text = "Start Game")
+fun SplashScreen(navController: NavController) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colorResource(R.color.start_time)), contentAlignment = Alignment.Center
+    ) {
+        Button(colors = ButtonDefaults.buttonColors(backgroundColor = colorResource(R.color.border_color)),
+            shape = RoundedCornerShape(64),
+            onClick = { navController.navigate("Game") }) {
+            Text(text = " START ", textAlign = TextAlign.Center, fontSize = 24.sp, color = colorResource(R.color.start_time))
+        }
     }
-
 }
 
 @Composable
-fun GameScreen(navController: NavController,context: Context,staticList:MutableList<ItemData>, chronometer: Chronometer){
+fun GameScreen(navController: NavController, staticList: MutableList<ItemData>, chronometer: Chronometer) {
     val test = staticList
+
+
+    var isGameOver by remember {
+        mutableStateOf(false)
+    }
+
+    val onBack = {
+        navController.popBackStack()
+        staticList.forEach {
+            it.itemStatus = false
+        }
+        isGameOver = false
+    }
+    BackPressHandler(onBackPressed = onBack)
+
 
     var wanted by remember {
         mutableStateOf(generateWantedNumber(staticList))
     }
-    Column() {
-        Text(modifier = Modifier.fillMaxWidth(), text = wanted, textAlign = TextAlign.Center)
+
+    var finishTime by remember {
+        mutableStateOf("")
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colorResource(R.color.start_time))
+    ) {
+        Spacer(modifier = Modifier.height(36.dp))
+        if (!isGameOver) {
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = "Find the number:",
+                textAlign = TextAlign.Center,
+                fontSize = 18.sp,
+                color = colorResource(R.color.text_color),
+                fontStyle = FontStyle.Italic
+            )
+        }
+        Text(
+            modifier = Modifier.fillMaxWidth(),
+            text = wanted,
+            textAlign = TextAlign.Center,
+            fontSize = 22.sp,
+            color = colorResource(R.color.text_color),
+            fontStyle = FontStyle.Normal,
+            fontWeight = FontWeight.Bold
+        )
         Spacer(modifier = Modifier.height(36.dp))
         LazyVerticalGrid(
             modifier = Modifier.padding(16.dp),
@@ -139,39 +195,62 @@ fun GameScreen(navController: NavController,context: Context,staticList:MutableL
         ) {
             itemsIndexed(items = test) { index, cell ->
                 Cell(cell, index) {
-                    if (!test[it].itemStatus && controlEquality(cell.itemValue,wanted.toInt())) {
+                    if (!test[it].itemStatus && controlEquality(cell.itemValue, wanted.toInt())) {
                         test[it].itemStatus = true
-                        wanted = generateWantedNumber(test){
+                        wanted = generateWantedNumber(test) {
                             chronometer.stop()
-                            navController.navigate("GameOver/${chronometer.base}")
-                        }
+                            var time = SystemClock.elapsedRealtime() - chronometer.base
+                            val h = (time / 3600000).toInt()
+                            val m = (time - h * 3600000).toInt() / 60000
+                            val s = (time - h * 3600000 - m * 60000).toInt() / 1000
+                            val t = (if (h < 10) "0$h" else h).toString() + ":" + (if (m < 10) "0$m" else m) + ":" + if (s < 10) "0$s" else s
+                            finishTime = String.format("%02d:%02d:%02d", h, m, s)
+                            isGameOver = true
 
+                        }
                         Log.e("Clicked:", "item: $cell index: $index")
                         Log.e("New List:", test.toString())
                     }
                 }
             }
         }
+        if (isGameOver) {
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = finishTime,
+                textAlign = TextAlign.Center,
+                fontSize = 18.sp,
+                color = colorResource(R.color.text_color)
+            )
+            Button(modifier = Modifier
+                .fillMaxWidth()
+                .padding(36.dp),
+                colors = ButtonDefaults.buttonColors(backgroundColor = colorResource(R.color.border_color)),
+                shape = RoundedCornerShape(64),
+                onClick = {
+                    navController.popBackStack()
+                    staticList.forEach {
+                        it.itemStatus = false
+                    }
+                    isGameOver = false
+                }) {
+                Text(text = " you can do better ", textAlign = TextAlign.Center, fontSize = 16.sp, color = colorResource(R.color.start_time))
+            }
+        }
+
     }
-}
-
-@Composable
-fun GameOverScreen(navController: NavController, time:String){
-
-    Text(text = convertLongToTime(time.toLong()))
 }
 
 fun convertLongToTime(time: Long): String {
     val date = Date(time)
     val format = SimpleDateFormat("HH:mm")
     return format.format(date)
-
 }
 
 
-private fun controlEquality(first : Int, second:Int):Boolean {
-    Log.e("First","$first")
-    Log.e("Second","$second")
+private fun controlEquality(first: Int, second: Int): Boolean {
+    Log.e("First", "$first")
+    Log.e("Second", "$second")
     return first == second
 }
 
@@ -197,18 +276,45 @@ fun Cell(itemData: ItemData, index: Int, onCellClicked: (Int) -> Unit) {
             .clickable {
                 Log.e("cell index", "$index")
                 onCellClicked.invoke(index)
-            },
-        border = BorderStroke(2.dp, Color.Red),
-        backgroundColor = if (itemData.itemStatus) Color.LightGray else Color.White
+            }, border = BorderStroke(2.dp, colorResource(R.color.border_color)), backgroundColor = colorResource(R.color.start_time)
     ) {
-        Text(modifier = Modifier.fillMaxSize(), text = itemData.itemValue.toString(), textAlign = TextAlign.Center)
+        Text(
+            text = itemData.itemValue.toString(),
+            textAlign = TextAlign.Center,
+            color = colorResource(R.color.text_color),
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
 data class ItemData(
-    val itemValue: Int,
-    var itemStatus: Boolean = false
+    val itemValue: Int, var itemStatus: Boolean = false
 )
+
+@Composable
+fun BackPressHandler(
+    backPressedDispatcher: OnBackPressedDispatcher? =
+        LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher,
+    onBackPressed: () -> Unit
+) {
+    val currentOnBackPressed by rememberUpdatedState(newValue = onBackPressed)
+
+    val backCallback = remember {
+        object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                currentOnBackPressed()
+            }
+        }
+    }
+
+    DisposableEffect(key1 = backPressedDispatcher) {
+        backPressedDispatcher?.addCallback(backCallback)
+
+        onDispose {
+            backCallback.remove()
+        }
+    }
+}
 
 
 
