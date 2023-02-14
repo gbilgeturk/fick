@@ -13,15 +13,19 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -42,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontStyle
@@ -49,45 +54,28 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.gokturk.bilgeturk.fick.ui.theme.BorderColor
 import com.gokturk.bilgeturk.fick.ui.theme.FickTheme
+import com.gokturk.bilgeturk.fick.ui.theme.StartTimeColor
+import com.gokturk.bilgeturk.fick.ui.theme.TextColor
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
 
-
     @SuppressLint("UnrememberedMutableState")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             FickTheme {
-                val staticList by remember {
-                    mutableStateOf(mutableListOf(
-                        ItemData(1, false),
-                        ItemData(2, false),
-                        ItemData(3, false),
-                        ItemData(4, false),
-                        ItemData(5, false),
-                        ItemData(6, false),
-                        ItemData(7, false),
-                        ItemData(8, false),
-                        ItemData(9, false),
-                        ItemData(10, false),
-                        ItemData(11, false),
-                        ItemData(12, false),
-                        ItemData(13, false),
-                        ItemData(14, false),
-                        ItemData(15, false),
-                        ItemData(16, false)
-                    ).apply {
-                        this.shuffle()
-                    })
-                }
+                var staticList = shuffleList()
+
                 val context = LocalContext.current
                 var ch = Chronometer(context)
                 ch.isCountDown = false
@@ -110,6 +98,7 @@ class MainActivity : ComponentActivity() {
                         composable(route = "Game") {
                             /* Using composable function */
                             ch.start()
+                            staticList = shuffleList()
                             GameScreen(navController, staticList, ch)
                         }
                     }
@@ -164,7 +153,7 @@ fun GameScreen(navController: NavController, staticList: MutableList<ItemData>, 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colorResource(R.color.start_time))
+            .background(StartTimeColor)
     ) {
         Spacer(modifier = Modifier.height(36.dp))
         if (!isGameOver) {
@@ -173,7 +162,7 @@ fun GameScreen(navController: NavController, staticList: MutableList<ItemData>, 
                 text = "Find the number:",
                 textAlign = TextAlign.Center,
                 fontSize = 18.sp,
-                color = colorResource(R.color.text_color),
+                color = TextColor,
                 fontStyle = FontStyle.Italic
             )
         }
@@ -182,7 +171,7 @@ fun GameScreen(navController: NavController, staticList: MutableList<ItemData>, 
             text = wanted,
             textAlign = TextAlign.Center,
             fontSize = 22.sp,
-            color = colorResource(R.color.text_color),
+            color = TextColor,
             fontStyle = FontStyle.Normal,
             fontWeight = FontWeight.Bold
         )
@@ -220,12 +209,12 @@ fun GameScreen(navController: NavController, staticList: MutableList<ItemData>, 
                 text = finishTime,
                 textAlign = TextAlign.Center,
                 fontSize = 18.sp,
-                color = colorResource(R.color.text_color)
+                color = TextColor
             )
             Button(modifier = Modifier
                 .fillMaxWidth()
                 .padding(36.dp),
-                colors = ButtonDefaults.buttonColors(backgroundColor = colorResource(R.color.border_color)),
+                colors = ButtonDefaults.buttonColors(backgroundColor = BorderColor),
                 shape = RoundedCornerShape(64),
                 onClick = {
                     navController.popBackStack()
@@ -234,19 +223,12 @@ fun GameScreen(navController: NavController, staticList: MutableList<ItemData>, 
                     }
                     isGameOver = false
                 }) {
-                Text(text = " you can do better ", textAlign = TextAlign.Center, fontSize = 16.sp, color = colorResource(R.color.start_time))
+                Text(text = " you can do better ", textAlign = TextAlign.Center, fontSize = 16.sp, color = StartTimeColor)
             }
         }
 
     }
 }
-
-fun convertLongToTime(time: Long): String {
-    val date = Date(time)
-    val format = SimpleDateFormat("HH:mm")
-    return format.format(date)
-}
-
 
 private fun controlEquality(first: Int, second: Int): Boolean {
     Log.e("First", "$first")
@@ -257,7 +239,7 @@ private fun controlEquality(first: Int, second: Int): Boolean {
 private fun generateWantedNumber(list: List<ItemData>, onFinish: (() -> Unit)? = null): String {
     list.filter { !it.itemStatus }.apply {
         if (this.size != 0) {
-            val randomIndex = Random.nextInt(this.size)
+            val randomIndex = Random(System.currentTimeMillis()).nextInt(this.size)
             val randomElement = this[randomIndex]
             return randomElement.itemValue.toString()
         } else {
@@ -269,21 +251,68 @@ private fun generateWantedNumber(list: List<ItemData>, onFinish: (() -> Unit)? =
 
 @Composable
 fun Cell(itemData: ItemData, index: Int, onCellClicked: (Int) -> Unit) {
-    Card(
+    Column(
         modifier = Modifier
-            .height(64.dp)
-            .height(64.dp)
-            .clickable {
-                Log.e("cell index", "$index")
-                onCellClicked.invoke(index)
-            }, border = BorderStroke(2.dp, colorResource(R.color.border_color)), backgroundColor = colorResource(R.color.start_time)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = itemData.itemValue.toString(),
-            textAlign = TextAlign.Center,
-            color = colorResource(R.color.text_color),
-            fontWeight = FontWeight.Bold
-        )
+        Card(
+            modifier = Modifier
+                .clickable {
+                    Log.e("cell index", "$index")
+                    onCellClicked.invoke(index)
+                }
+                .width(64.dp)
+                .height(64.dp),
+            backgroundColor = Color(0xFFE95C4B),
+            elevation = 4.dp,
+            shape = RoundedCornerShape(12.dp),
+        ) {
+            ConstraintLayout(modifier = Modifier.fillMaxSize()) {
+                val (text) = createRefs()
+                Text(
+                    modifier = Modifier.constrainAs(text) {
+                        top.linkTo(parent.top)
+                        start.linkTo(parent.start)
+                        end.linkTo(parent.end)
+                        bottom.linkTo(parent.bottom)
+                    },
+                    text = itemData.itemValue.toString(),
+                    color = StartTimeColor,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+
+                )
+            }
+
+
+        }
+    }
+
+
+}
+
+private fun shuffleList(): MutableList<ItemData> {
+    return mutableListOf(
+        ItemData(1, false),
+        ItemData(2, false),
+        ItemData(3, false),
+        ItemData(4, false),
+        ItemData(5, false),
+        ItemData(6, false),
+        ItemData(7, false),
+        ItemData(8, false),
+        ItemData(9, false),
+        ItemData(10, false),
+        ItemData(11, false),
+        ItemData(12, false),
+        ItemData(13, false),
+        ItemData(14, false),
+        ItemData(15, false),
+        ItemData(16, false)
+    ).apply {
+        this.shuffle()
     }
 }
 
